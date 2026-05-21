@@ -1,0 +1,31 @@
+{
+  "name": "@pigeonworks/auto-cron",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "description": "Mac/Linux 両対応のジョブ実行基盤 (retry + 依存関係 + 並列処理制御 + 通知 + dashboard). Hexagonal 3 layer + Bun single binary. Successor of auto-forge Phase S (Jenkins cron + launchd intel.*).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint:deps": "depcruise src",
+    "lint:deps:graph": "depcruise --output-type dot src | dot -T svg > dist/deps.svg",
+    "start": "bun src/main/daemon.ts",
+    "cli": "bun src/main/bin.ts",
+    "build:bin:mac": "bun build src/main/bin.ts --compile --target=bun-darwin-arm64 --outfile dist/auto-cron-darwin-arm64",
+    "build:bin:linux": "bun build src/main/bin.ts --compile --target=bun-linux-arm64 --outfile dist/auto-cron-linux-arm64",
+    "build:daemon:mac": "bun build src/main/daemon.ts --compile --target=bun-darwin-arm64 --outfile dist/auto-cron-daemon-darwin-arm64",
+    "build:daemon:linux": "bun build src/main/daemon.ts --compile --target=bun-linux-arm64 --outfile dist/auto-cron-daemon-linux-arm64"
+  },
+  "dependencies": {
+    "pino": "^9.x"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "dependency-cruiser": "^16.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}
