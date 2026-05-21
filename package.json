@@ -18,7 +18,8 @@
     "build:daemon:linux": "bun build src/main/daemon.ts --compile --target=bun-linux-arm64 --outfile dist/auto-cron-daemon-linux-arm64"
   },
   "dependencies": {
-    "pino": "^9.x"
+    "pino": "^9.x",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
