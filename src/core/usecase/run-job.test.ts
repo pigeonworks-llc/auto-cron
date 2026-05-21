@@ -33,9 +33,9 @@ function makeExecutor(result: Partial<ExecResult> = {}): Executor {
 }
 
 function makeRunStore(): RunStore {
-  let runId = "run-1";
+  let count = 0;
   return {
-    insert: async () => runId,
+    insert: async () => `run-${++count}`,
     setState: async () => {},
     recent: async () => [],
     latestSucceeded: async () => null,
@@ -106,5 +106,104 @@ describe("run-job usecase", () => {
       runId: "run-abc",
       patch: { state: "succeeded", exitCode: 0 },
     });
+  });
+
+  it("retries until success on 3rd attempt", async () => {
+    const job = makeOneshotJob({ retry: { maxAttempts: 3, backoffMs: [] } });
+    let callCount = 0;
+    const executor: Executor = {
+      run: async () => ({
+        exitCode: ++callCount < 3 ? 1 : 0,
+        stdout: "",
+        stderr: "",
+        killed: false,
+      }),
+    };
+    const deps: RunJobDeps = {
+      executor,
+      runStore: makeRunStore(),
+      clock: makeClock(),
+      sleep: async () => {},
+    };
+    const result = await runJob(job, deps);
+    expect(result.finalAttempt).toBe(3);
+    expect(result.finalFailure).toBe(false);
+    expect(result.runIds.length).toBe(3);
+  });
+
+  it("exhausts all attempts and returns finalFailure=true", async () => {
+    const job = makeOneshotJob({ retry: { maxAttempts: 3, backoffMs: [] } });
+    const deps: RunJobDeps = {
+      executor: makeExecutor({ exitCode: 1 }),
+      runStore: makeRunStore(),
+      clock: makeClock(),
+      sleep: async () => {},
+    };
+    const result = await runJob(job, deps);
+    expect(result.finalAttempt).toBe(3);
+    expect(result.finalFailure).toBe(true);
+    expect(result.runIds.length).toBe(3);
+  });
+
+  it("returns failure immediately when signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const job = makeOneshotJob({ retry: { maxAttempts: 3, backoffMs: [] } });
+    const deps: RunJobDeps = {
+      executor: makeExecutor({ exitCode: 0 }),
+      runStore: makeRunStore(),
+      clock: makeClock(),
+      sleep: async () => {},
+    };
+    const result = await runJob(job, deps, controller.signal);
+    expect(result.finalFailure).toBe(true);
+    expect(result.runIds.length).toBe(0);
+  });
+
+  it("stops retrying when signal is aborted between attempts", async () => {
+    const controller = new AbortController();
+    const job = makeOneshotJob({ retry: { maxAttempts: 3, backoffMs: [100] } });
+    const executor: Executor = {
+      run: async () => ({ exitCode: 1, stdout: "", stderr: "", killed: false }),
+    };
+    const deps: RunJobDeps = {
+      executor,
+      runStore: makeRunStore(),
+      clock: makeClock(),
+      // abort during the first sleep (between attempt 1 and 2)
+      sleep: async (_ms, _signal) => {
+        controller.abort();
+      },
+    };
+    const result = await runJob(job, deps, controller.signal);
+    expect(result.finalFailure).toBe(true);
+    // attempt 1 completed, abort detected at top of attempt 2
+    expect(result.runIds.length).toBe(1);
+    expect(result.finalAttempt).toBe(1);
+  });
+
+  it("calls sleep with correct backoffMs between attempts", async () => {
+    const sleepCalls: number[] = [];
+    const job = makeOneshotJob({ retry: { maxAttempts: 3, backoffMs: [100, 200] } });
+    let callCount = 0;
+    const executor: Executor = {
+      run: async () => ({
+        exitCode: ++callCount < 3 ? 1 : 0,
+        stdout: "",
+        stderr: "",
+        killed: false,
+      }),
+    };
+    const deps: RunJobDeps = {
+      executor,
+      runStore: makeRunStore(),
+      clock: makeClock(),
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+    };
+    await runJob(job, deps);
+    // sleep called after attempt 1 (backoffMs[0]=100) and after attempt 2 (backoffMs[1]=200)
+    expect(sleepCalls).toEqual([100, 200]);
   });
 });
