@@ -49,6 +49,48 @@ jobs:
     notify:
       onFailure: immediate
 
+  # Phase K wave 1 #3: migrate from Jenkins dotfiles/renovate (Docker → bun x renovate)
+  # Source: Jenkinsfile.renovate @ dotfiles origin/main (docker run renovate/renovate)
+  # Switch: Docker image → `bun x renovate@latest` 直起動 (plan: container 不使用方針)
+  # Schedule: renovate.json schedule "after 9am on monday" = `0 9 * * 1` Asia/Tokyo 固定
+  # Concurrency: group renovate (globalConcurrency.groupMax.renovate=1 で 1 並列固定済)
+  # Secret: RENOVATE_TOKEN は daemon の env 経由 (sops/forgejo.sops.env を launchd plist で
+  #   load 想定、 暫定で FORGEJO_TOKEN を再利用、 専用 renovate-bot user は別 task)
+  - name: dotfiles-renovate
+    schedule:
+      kind: cron
+      expr: "0 9 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
+        export RENOVATE_PLATFORM=forgejo
+        export RENOVATE_ENDPOINT=http://forgejo.localhost/api/v1
+        export RENOVATE_GIT_URL=endpoint
+        export RENOVATE_AUTODISCOVER=false
+        export RENOVATE_ONBOARDING=false
+        export RENOVATE_REPOSITORIES=shunichi-ikebuchi/dotfiles
+        export RENOVATE_GIT_AUTHOR="Renovate Bot <renovate@pigeonworks.local>"
+        export RENOVATE_TOKEN="${RENOVATE_TOKEN:-${FORGEJO_TOKEN:-}}"
+        if [ -z "$RENOVATE_TOKEN" ]; then
+          echo "RENOVATE_TOKEN / FORGEJO_TOKEN unset — daemon env wiring incomplete (see deploy launchd plist)" >&2
+          exit 1
+        fi
+        bun x renovate@latest
+    env:
+      CI: "true"
+    concurrency:
+      onOverlap: skip
+      group: renovate
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
+
   # Phase K wave 1 #2: migrate from Jenkins docs/link-check
   # Source: Jenkinsfile.link-check @ docs origin/main
   # - Setup: npm install (idempotent)
