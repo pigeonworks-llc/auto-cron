@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { YamlJobConfig } from "../adapters/config/yaml-job-config";
 import { SqliteRunStore } from "../adapters/store/sqlite-run-store";
 import { runMigrations, loadMigrationsFromDir } from "../adapters/store/migration-runner";
@@ -16,6 +17,7 @@ import { findDueJobs } from "../core/usecase/schedule-tick";
 
 export function buildDeps(cfg: { jobsYaml: string; dbPath: string; dashboardPort: number }) {
   const jobConfig = new YamlJobConfig(cfg.jobsYaml);
+  mkdirSync(dirname(cfg.dbPath), { recursive: true });
   const db = new Database(cfg.dbPath, { create: true });
   // migrations apply (Phase C migration-runner 経由)
   const migrations = loadMigrationsFromDir(join(import.meta.dir, "../adapters/store/migrations"));
