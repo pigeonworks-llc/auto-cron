@@ -1,4 +1,10 @@
 # auto-cron initial config (chezmoi template、deploy 後 user 編集前提)
+#
+# Cron job lifecycle commands are 1-line `make <target>` calls; the actual
+# logic lives in the target repo (dotfiles / docs) under scripts/ci/*.sh,
+# wired through makefiles/cron-jobs.mk (dotfiles) or Makefile (docs).
+# This keeps shell out of yaml and lets a future GitHub Actions workflow
+# reuse the exact same target via `run: make <name>`.
 global:
   maxConcurrentJobs: 4
   groupMax:
@@ -21,26 +27,18 @@ jobs:
       onFailure: digest
 
   # Phase K wave 1 #1: migrate from Jenkins dotfiles/bats-full
-  # Source: Jenkinsfile.bats-full @ origin/main (sh stage は find ... bats --jobs 8 1 行)
-  # Schedule: Jenkins 側 `H(30-59) 3 * * *` を croner 互換に固定化 (cron 5-field、 H symbol 非対応)
-  # Shadow-run: Jenkins 側 cron は当面残す (1 週間 stable 確認後 jobs.yaml から削除)
+  # Source: dotfiles makefiles/cron-jobs.mk → scripts/ci/bats-full.sh
+  # Schedule: Jenkins 側 `H(30-59) 3 * * *` を croner 互換に固定化 (cron 5-field)
   - name: dotfiles-bats-full
     schedule:
       kind: cron
       expr: "45 3 * * *"
       timezone: Asia/Tokyo
     command:
-      - bash
-      - -lc
-      - |
-        set -euo pipefail
-        cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
-        find . -name "executable_*" -type f ! -path "./.git/*" -exec chmod +x {} +
-        find . -name "*.bats" -type f \
-          ! -path "./.git/*" \
-          ! -path "./node_modules/*" \
-          ! -path "./archive/*" \
-          -print0 | xargs -0 -r bats --jobs 8
+      - make
+      - -C
+      - {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
+      - bats-full
     env:
       CI: "true"
     retry:
@@ -50,36 +48,20 @@ jobs:
       onFailure: immediate
 
   # Phase K wave 1 #3: migrate from Jenkins dotfiles/renovate (Docker → bun x renovate)
-  # Source: Jenkinsfile.renovate @ dotfiles origin/main (docker run renovate/renovate)
-  # Switch: Docker image → `bun x renovate@latest` 直起動 (plan: container 不使用方針)
-  # Schedule: renovate.json schedule "after 9am on monday" = `0 9 * * 1` Asia/Tokyo 固定
-  # Concurrency: group renovate (globalConcurrency.groupMax.renovate=1 で 1 並列固定済)
-  # Secret: RENOVATE_TOKEN は daemon の env 経由 (sops/forgejo.sops.env を launchd plist で
-  #   load 想定、 暫定で FORGEJO_TOKEN を再利用、 専用 renovate-bot user は別 task)
+  # Source: dotfiles makefiles/cron-jobs.mk → scripts/ci/renovate.sh
+  # Schedule: renovate.json schedule "after 9am on monday" = `0 9 * * 1` Asia/Tokyo
+  # Concurrency: group renovate (globalConcurrency.groupMax.renovate=1 で 1 並列固定)
+  # Secret: RENOVATE_TOKEN / FORGEJO_TOKEN は daemon の env 経由 (launchd plist で sops exec-env)
   - name: dotfiles-renovate
     schedule:
       kind: cron
       expr: "0 9 * * 1"
       timezone: Asia/Tokyo
     command:
-      - bash
-      - -lc
-      - |
-        set -euo pipefail
-        cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
-        export RENOVATE_PLATFORM=forgejo
-        export RENOVATE_ENDPOINT=http://forgejo.localhost/api/v1
-        export RENOVATE_GIT_URL=endpoint
-        export RENOVATE_AUTODISCOVER=false
-        export RENOVATE_ONBOARDING=false
-        export RENOVATE_REPOSITORIES=shunichi-ikebuchi/dotfiles
-        export RENOVATE_GIT_AUTHOR="Renovate Bot <renovate@pigeonworks.local>"
-        export RENOVATE_TOKEN="${RENOVATE_TOKEN:-${FORGEJO_TOKEN:-}}"
-        if [ -z "$RENOVATE_TOKEN" ]; then
-          echo "RENOVATE_TOKEN / FORGEJO_TOKEN unset — daemon env wiring incomplete (see deploy launchd plist)" >&2
-          exit 1
-        fi
-        bun x renovate@latest
+      - make
+      - -C
+      - {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
+      - renovate
     env:
       CI: "true"
     concurrency:
@@ -92,12 +74,9 @@ jobs:
       onFailure: immediate
 
   # Phase K wave 1 #2: migrate from Jenkins docs/link-check
-  # Source: Jenkinsfile.link-check @ docs origin/main
-  # - Setup: npm install (idempotent)
-  # - Link Check (full repo): find docs/*.md | xargs npx markdown-link-check -q -c .markdown-link-check.json
-  # Schedule: Jenkins 側 `H 3 * * *` (UTC) = 12:00 JST 固定。 cron 5-field 表記。
-  # Notify: warn-only (Jenkins では unstable、 PR block しない)、 auto-cron では digest 経路で朝集約。
-  # Shadow-run: Jenkins 側 cron は当面残す。
+  # Source: docs Makefile lint-link-ci → scripts/ci/lint-link-ci.sh
+  # Schedule: Jenkins 側 `H 3 * * *` (UTC) = 12:00 JST 固定
+  # Notify: digest (auto-cron 朝集約)、 strict exit code は make target 側で担保
   - name: docs-link-check
     schedule:
       kind: cron
@@ -110,16 +89,7 @@ jobs:
         set -euo pipefail
         cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/docs
         npm install --no-audit --no-fund --silent
-        FAILED=0
-        TOTAL=0
-        while IFS= read -r f; do
-          TOTAL=$((TOTAL+1))
-          if ! npx markdown-link-check -q -c .markdown-link-check.json "$f"; then
-            FAILED=$((FAILED+1))
-          fi
-        done < <(find docs -name '*.md' -type f)
-        echo "files checked: $TOTAL, failed: $FAILED"
-        test "$FAILED" -eq 0
+        make lint-link-ci
     env:
       CI: "true"
     retry:
