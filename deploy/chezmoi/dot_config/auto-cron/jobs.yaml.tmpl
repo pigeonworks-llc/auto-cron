@@ -19,3 +19,32 @@ jobs:
       resetAfterSec: 60
     notify:
       onFailure: digest
+
+  # Phase K wave 1 #1: migrate from Jenkins dotfiles/bats-full
+  # Source: Jenkinsfile.bats-full @ origin/main (sh stage は find ... bats --jobs 8 1 行)
+  # Schedule: Jenkins 側 `H(30-59) 3 * * *` を croner 互換に固定化 (cron 5-field、 H symbol 非対応)
+  # Shadow-run: Jenkins 側 cron は当面残す (1 週間 stable 確認後 jobs.yaml から削除)
+  - name: dotfiles-bats-full
+    schedule:
+      kind: cron
+      expr: "45 3 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/dotfiles
+        find . -name "executable_*" -type f ! -path "./.git/*" -exec chmod +x {} +
+        find . -name "*.bats" -type f \
+          ! -path "./.git/*" \
+          ! -path "./node_modules/*" \
+          ! -path "./archive/*" \
+          -print0 | xargs -0 -r bats --jobs 8
+    env:
+      CI: "true"
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
