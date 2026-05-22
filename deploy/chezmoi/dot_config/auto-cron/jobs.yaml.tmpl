@@ -1,0 +1,21 @@
+# auto-cron initial config (chezmoi template、deploy 後 user 編集前提)
+global:
+  maxConcurrentJobs: 4
+  groupMax:
+    renovate: 1
+
+jobs:
+  - name: auto-forge-serve
+    lifecycle: service
+    command:
+      - sops
+      - exec-env
+      - {{ .chezmoi.homeDir }}/.config/secrets/github.sops.env
+      - bun {{ .chezmoi.homeDir }}/src/forgejo.localhost/pigeonworks-llc/auto-forge/src/main/bin.ts serve
+    env:
+      AUTO_FORGE_DATA_DIR: {{ .chezmoi.homeDir }}/.local/share/auto-forge
+    restart:
+      backoffMs: [1000, 5000, 30000]
+      resetAfterSec: 60
+    notify:
+      onFailure: digest

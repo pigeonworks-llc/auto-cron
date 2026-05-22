@@ -1,0 +1,12 @@
+[Unit]
+Description=auto-cron job orchestrator
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/mise/installs/bun/1.3/bin/bun %h/src/auto-cron/src/main/daemon.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

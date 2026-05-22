@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.pigeonworks.auto-cron</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/shunichi/.local/share/mise/installs/bun/1.3/bin/bun</string>
+    <string>/Users/shunichi/src/forgejo.localhost/pigeonworks-llc/auto-cron/src/main/daemon.ts</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/shunichi/Library/Logs/auto-cron/stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/shunichi/Library/Logs/auto-cron/stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/shunichi</string>
+    <key>PATH</key><string>/Users/shunichi/.local/share/mise/installs/bun/1.3/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
