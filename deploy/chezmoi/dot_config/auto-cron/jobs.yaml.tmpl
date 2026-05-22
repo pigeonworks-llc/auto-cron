@@ -48,3 +48,40 @@ jobs:
       backoffMs: []
     notify:
       onFailure: immediate
+
+  # Phase K wave 1 #2: migrate from Jenkins docs/link-check
+  # Source: Jenkinsfile.link-check @ docs origin/main
+  # - Setup: npm install (idempotent)
+  # - Link Check (full repo): find docs/*.md | xargs npx markdown-link-check -q -c .markdown-link-check.json
+  # Schedule: Jenkins 側 `H 3 * * *` (UTC) = 12:00 JST 固定。 cron 5-field 表記。
+  # Notify: warn-only (Jenkins では unstable、 PR block しない)、 auto-cron では digest 経路で朝集約。
+  # Shadow-run: Jenkins 側 cron は当面残す。
+  - name: docs-link-check
+    schedule:
+      kind: cron
+      expr: "0 12 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        cd {{ .chezmoi.homeDir }}/src/forgejo.localhost/shunichi-ikebuchi/docs
+        npm install --no-audit --no-fund --silent
+        FAILED=0
+        TOTAL=0
+        while IFS= read -r f; do
+          TOTAL=$((TOTAL+1))
+          if ! npx markdown-link-check -q -c .markdown-link-check.json "$f"; then
+            FAILED=$((FAILED+1))
+          fi
+        done < <(find docs -name '*.md' -type f)
+        echo "files checked: $TOTAL, failed: $FAILED"
+        test "$FAILED" -eq 0
+    env:
+      CI: "true"
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
