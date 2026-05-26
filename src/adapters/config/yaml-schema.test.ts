@@ -401,3 +401,105 @@ describe("validateYamlJobsFile — edge cases", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// notify.severity_routing (ADR-0088)
+// ---------------------------------------------------------------------------
+
+describe("validateYamlJobsFile — notify.severity_routing", () => {
+  it("accepts severity_routing with warn + crit (full)", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        severity_routing: { warn: "digest", crit: "immediate" },
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const job = result.value.jobs[0];
+    if (!job) return;
+    expect(job.notify.severity_routing).toEqual({
+      warn: "digest",
+      crit: "immediate",
+    });
+  });
+
+  it("accepts severity_routing with only crit (partial)", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        severity_routing: { crit: "immediate" },
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts notify without severity_routing (optional)", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: { onFailure: "digest" },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const job = result.value.jobs[0];
+    if (!job) return;
+    expect(job.notify.severity_routing).toBeUndefined();
+  });
+
+  it("rejects severity_routing with invalid dispatch value", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        severity_routing: { warn: "shout" },
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.some((e) =>
+        e.path.endsWith("notify.severity_routing.warn"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects severity_routing with unknown severity key", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        severity_routing: { info: "immediate" },
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.some((e) =>
+        e.path.endsWith("notify.severity_routing.info"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects severity_routing that is not an object", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        severity_routing: "digest",
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.some((e) => e.path.endsWith("notify.severity_routing")),
+    ).toBe(true);
+  });
+});

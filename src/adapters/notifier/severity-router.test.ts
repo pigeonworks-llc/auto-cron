@@ -121,4 +121,87 @@ describe("SeverityRouter", () => {
     expect(gchat.calls).toHaveLength(0);
     expect(digest.calls).toHaveLength(0);
   });
+
+  // === ADR-0088 severity_routing ===
+
+  it("severity_routing.crit=immediate + severity=error → gchat (overrides onFailure)", async () => {
+    const gchat = makeNotifier();
+    const digest = makeNotifier();
+    const router = new SeverityRouter({ warnDigestFile: digest.notifier, gchatWebhook: gchat.notifier });
+
+    // onFailure=digest would normally route to digest, but severity_routing.crit wins.
+    const job = makeJob({
+      onFailure: "digest",
+      severity_routing: { warn: "digest", crit: "immediate" },
+    });
+    const run = makeRun("failed");
+    await router.notify({ job, run, severity: "error" });
+
+    expect(gchat.calls).toHaveLength(1);
+    expect(gchat.calls[0]!.severity).toBe("error");
+    expect(digest.calls).toHaveLength(0);
+  });
+
+  it("severity_routing.warn=digest + severity=warn → warn-digest", async () => {
+    const gchat = makeNotifier();
+    const digest = makeNotifier();
+    const router = new SeverityRouter({ warnDigestFile: digest.notifier, gchatWebhook: gchat.notifier });
+
+    const job = makeJob({
+      onFailure: "immediate",
+      severity_routing: { warn: "digest", crit: "immediate" },
+    });
+    const run = makeRun("failed");
+    await router.notify({ job, run, severity: "warn" });
+
+    expect(digest.calls).toHaveLength(1);
+    expect(digest.calls[0]!.severity).toBe("warn");
+    expect(gchat.calls).toHaveLength(0);
+  });
+
+  it("severity_routing.warn=silent + severity=warn → no-op", async () => {
+    const gchat = makeNotifier();
+    const digest = makeNotifier();
+    const router = new SeverityRouter({ warnDigestFile: digest.notifier, gchatWebhook: gchat.notifier });
+
+    const job = makeJob({
+      onFailure: "immediate",
+      severity_routing: { warn: "silent", crit: "immediate" },
+    });
+    const run = makeRun("failed");
+    await router.notify({ job, run, severity: "warn" });
+
+    expect(gchat.calls).toHaveLength(0);
+    expect(digest.calls).toHaveLength(0);
+  });
+
+  it("severity_routing.crit unset + severity=error → fallback to onFailure", async () => {
+    const gchat = makeNotifier();
+    const digest = makeNotifier();
+    const router = new SeverityRouter({ warnDigestFile: digest.notifier, gchatWebhook: gchat.notifier });
+
+    // severity_routing has only warn; crit falls back to onFailure (immediate).
+    const job = makeJob({
+      onFailure: "immediate",
+      severity_routing: { warn: "digest" },
+    });
+    const run = makeRun("failed");
+    await router.notify({ job, run, severity: "error" });
+
+    expect(gchat.calls).toHaveLength(1);
+    expect(digest.calls).toHaveLength(0);
+  });
+
+  it("severity_routing absent → flat onFailure used (unchanged legacy)", async () => {
+    const gchat = makeNotifier();
+    const digest = makeNotifier();
+    const router = new SeverityRouter({ warnDigestFile: digest.notifier, gchatWebhook: gchat.notifier });
+
+    const job = makeJob({ onFailure: "digest" }); // no severity_routing
+    const run = makeRun("failed");
+    await router.notify({ job, run, severity: "warn" });
+
+    expect(digest.calls).toHaveLength(1);
+    expect(gchat.calls).toHaveLength(0);
+  });
 });

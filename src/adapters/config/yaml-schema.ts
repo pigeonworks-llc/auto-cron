@@ -209,10 +209,10 @@ function validateNotify(raw: unknown, path: string): ValidationError[] {
     return [{ path, message: "must be object" }];
   }
   const obj = raw as Record<string, unknown>;
-  const validOnFailure: readonly string[] = ["immediate", "digest", "silent"];
+  const validDispatch: readonly string[] = ["immediate", "digest", "silent"];
   if (
     typeof obj["onFailure"] !== "string" ||
-    !validOnFailure.includes(obj["onFailure"])
+    !validDispatch.includes(obj["onFailure"])
   ) {
     errors.push({
       path: `${path}.onFailure`,
@@ -229,6 +229,35 @@ function validateNotify(raw: unknown, path: string): ValidationError[] {
         path: `${path}.onSuccess`,
         message: 'must be "immediate" or "silent"',
       });
+    }
+  }
+  // severity_routing (optional, ADR-0088).
+  if (obj["severity_routing"] !== undefined) {
+    const sr = obj["severity_routing"];
+    if (sr === null || typeof sr !== "object" || Array.isArray(sr)) {
+      errors.push({
+        path: `${path}.severity_routing`,
+        message: "must be object",
+      });
+    } else {
+      const srObj = sr as Record<string, unknown>;
+      const validKeys: readonly string[] = ["warn", "crit"];
+      for (const key of Object.keys(srObj)) {
+        if (!validKeys.includes(key)) {
+          errors.push({
+            path: `${path}.severity_routing.${key}`,
+            message: 'unknown key (expected "warn" or "crit")',
+          });
+          continue;
+        }
+        const value = srObj[key];
+        if (typeof value !== "string" || !validDispatch.includes(value)) {
+          errors.push({
+            path: `${path}.severity_routing.${key}`,
+            message: 'must be "immediate", "digest", or "silent"',
+          });
+        }
+      }
     }
   }
   return errors;
