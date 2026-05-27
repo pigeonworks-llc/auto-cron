@@ -32,9 +32,10 @@ export function buildDeps(cfg: { jobsYaml: string; dbPath: string; dashboardPort
     gchatWebhook: new GChatWebhookNotifier(process.env.GCHAT_WEBHOOK_AUTOCRON ?? ""),
   });
   const events = new SseChannel();
-  startDashboard({ jobConfig, runStore, port: cfg.dashboardPort, events });
+  const dashboardServer = startDashboard({ jobConfig, runStore, port: cfg.dashboardPort, events });
   return {
     jobConfig, runStore, executor, clock, scheduler, concurrencyController, notifier, events,
+    dashboardServer,
     runJob: (job: any, _ignore: any, signal?: AbortSignal) =>
       runJob(job, { executor, runStore, clock, sleep: (ms: number, s?: AbortSignal) => new Promise<void>(r => setTimeout(r, ms)) }, signal),
     scheduleTick: { findDueJobs },

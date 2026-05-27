@@ -9,14 +9,36 @@ const cfg = {
 };
 
 const ac = new AbortController();
-process.on("SIGTERM", () => ac.abort());
-process.on("SIGINT", () => ac.abort());
+const deps = buildDeps(cfg);
+
+// Graceful shutdown — release the dashboard port and abort the scheduler
+// loop. Without `dashboardServer.stop(true)` the listening socket lingers
+// past process exit (observed: launchctl kickstart -k spawns a fresh bun
+// instance that then EADDRINUSE because the previous bun is still holding
+// :7891). See issue pigeonworks-llc/auto-cron#38.
+let shuttingDown = false;
+function shutdown(reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`auto-cron daemon: ${reason}, shutting down`);
+  ac.abort();
+  try {
+    deps.dashboardServer.stop(true);
+  } catch (e) {
+    console.error("dashboard.stop() failed:", e);
+  }
+  // Give the scheduler loop one tick to observe `aborted`, then force-exit
+  // so launchd sees us cleanly gone. Without this Bun may keep the process
+  // alive for stray promise handles in the loop.
+  setTimeout(() => process.exit(0), 100);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGHUP", () => {
   console.log("SIGHUP: reloading jobs.yaml");
+  void deps.jobConfig.reload();
 });
-
-const deps = buildDeps(cfg);
-process.on("SIGHUP", () => { void deps.jobConfig.reload(); });
 
 console.log(`auto-cron daemon starting (jobs=${deps.jobConfig.jobs().length}, dashboard=:${cfg.dashboardPort})`);
 
