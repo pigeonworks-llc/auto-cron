@@ -97,3 +97,509 @@ jobs:
       backoffMs: []
     notify:
       onFailure: digest
+
+  # ── intel.* migration (2026-06-14, plan: quiet-marinating-karp) ──
+  # strategy/tools/intel CLI を 26 個の個別 launchd plist (com.local.intel.*) から
+  # auto-cron に集約。 command は node 直呼び (shell-free、 make 化思想と整合)。
+  # node は mise shim (global 24.15.0 追従、 version-drift 耐性)。 secret は intel
+  # CLI が自前で ~/.config/intel/env を dotenv 読み込みするため env 注入不要。
+  # intel は全 path を homedir() 絶対参照するので cwd 不要 (auto-cron validator は
+  # cwd を drop するため指定しても効かない)。 PATH env のみ補完 (intel が PATH 上の
+  # git 等を呼ぶ保険)。 旧 plist は bootout 後 1 週間残置。
+  # notify: news/task/brief=digest、 egov-law-watch / version-notify / audit /
+  #         vendor-watch=immediate (用途別振り分け)。
+
+  # migrated from com.local.intel.primary-mof-news
+  - name: intel-primary-mof-news
+    schedule:
+      kind: cron
+      expr: "7 9 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - mof-news
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-nta-news
+  - name: intel-primary-nta-news
+    schedule:
+      kind: cron
+      expr: "9 9 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - nta-news
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-maff-news
+  - name: intel-primary-maff-news
+    schedule:
+      kind: cron
+      expr: "11 9 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - maff-news
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-mhlw-news
+  - name: intel-primary-mhlw-news
+    schedule:
+      kind: cron
+      expr: "13 9 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - mhlw-news
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-soumu-news
+  - name: intel-primary-soumu-news
+    schedule:
+      kind: cron
+      expr: "17 9 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - soumu-news
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-lancers-gigs
+  - name: intel-primary-lancers-gigs
+    schedule:
+      kind: cron
+      expr: "0 6 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - lancers-gigs
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.primary-egov-law-watch
+  - name: intel-primary-egov-law-watch
+    schedule:
+      kind: cron
+      expr: "0 2 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/primary/cli.js
+      - run
+      - egov-law-watch
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
+
+  # migrated from com.local.intel.task-hn-digest
+  - name: intel-task-hn-digest
+    schedule:
+      kind: cron
+      expr: "0 14 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - hn-digest
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-freee-weekly
+  - name: intel-task-freee-weekly
+    schedule:
+      kind: cron
+      expr: "0 8 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - freee-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-google-weekly
+  - name: intel-task-google-weekly
+    schedule:
+      kind: cron
+      expr: "15 8 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - google-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-cloudflare-weekly
+  - name: intel-task-cloudflare-weekly
+    schedule:
+      kind: cron
+      expr: "30 8 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - cloudflare-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-golang-weekly
+  - name: intel-task-golang-weekly
+    schedule:
+      kind: cron
+      expr: "0 9 * * 5"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - golang-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-tech-summary
+  - name: intel-task-tech-summary
+    schedule:
+      kind: cron
+      expr: "0 9 * * 3"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - tech-summary
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-precision-nutrition
+  - name: intel-task-precision-nutrition
+    schedule:
+      kind: cron
+      expr: "30 9 * * 3"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - precision-nutrition
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-tottori-weekly
+  - name: intel-task-tottori-weekly
+    schedule:
+      kind: cron
+      expr: "0 9 * * 0"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - tottori-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-claude-weekly
+  - name: intel-task-claude-weekly
+    schedule:
+      kind: cron
+      expr: "0 7 * * 1,3,5"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - claude-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-japan-hunting
+  - name: intel-task-japan-hunting
+    schedule:
+      kind: cron
+      expr: "0 9 3 * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - japan-hunting
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-japan-policy
+  - name: intel-task-japan-policy
+    schedule:
+      kind: cron
+      expr: "0 9 15 * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - japan-policy
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.task-drug-safety-monthly
+  - name: intel-task-drug-safety-monthly
+    schedule:
+      kind: cron
+      expr: "0 9 1 * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - run
+      - drug-safety-monthly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.brief-daily
+  - name: intel-brief-daily
+    schedule:
+      kind: cron
+      expr: "0 10 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - brief
+      - daily
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.brief-weekly
+  - name: intel-brief-weekly
+    schedule:
+      kind: cron
+      expr: "30 10 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - brief
+      - weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.brief-monthly
+  - name: intel-brief-monthly
+    schedule:
+      kind: cron
+      expr: "0 10 16 * *"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - brief
+      - monthly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.brief-claude
+  - name: intel-brief-claude
+    schedule:
+      kind: cron
+      expr: "30 9 * * 1,3,5"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - brief
+      - claude
+      - --tasks
+      - claude-weekly
+      - --channels
+      - gmail
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: digest
+
+  # migrated from com.local.intel.claude-version-notify
+  - name: intel-claude-version-notify
+    schedule:
+      kind: cron
+      expr: "30 8 * * 1,3,5"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - claude-version-notify
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
+
+  # migrated from com.local.intel.briefing-claude-code-audit-weekly
+  - name: intel-briefing-claude-code-audit-weekly
+    schedule:
+      kind: cron
+      expr: "0 9 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - claude-code-audit-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
+
+  # migrated from com.local.intel.briefing-vendor-watch-weekly (service-runner 経由、 bash)
+  - name: intel-briefing-vendor-watch-weekly
+    schedule:
+      kind: cron
+      expr: "0 9 * * 1"
+      timezone: Asia/Tokyo
+    command:
+      - /bin/bash
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/service-runner/run.sh
+      - briefing-vendor-watch-weekly
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
