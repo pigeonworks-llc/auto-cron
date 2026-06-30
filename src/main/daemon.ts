@@ -10,6 +10,10 @@ const cfg = {
   jobsYaml: process.env.AUTO_CRON_JOBS_YAML ?? `${process.env.HOME}/.config/auto-cron/jobs.yaml`,
   dbPath: process.env.AUTO_CRON_DB_PATH ?? `${process.env.HOME}/.local/share/auto-cron/runs.db`,
   dashboardPort: Number(process.env.AUTO_CRON_DASHBOARD_PORT ?? 7891),
+  // Bind the dashboard on IPv4 loopback (default "localhost" binds ::1 only on
+  // macOS, which Prometheus — scraping 127.0.0.1:7891 like the rest of the
+  // monitoring fleet — cannot reach → target down). 127.0.0.1 stays loopback-only.
+  dashboardHost: process.env.AUTO_CRON_DASHBOARD_HOST ?? "127.0.0.1",
   // silent-failure L2: daemon liveness footprint (外部 watchdog が mtime を見る) +
   // job 沈黙検知 (予定 + grace を過ぎても走らない job を warn 通知)。
   heartbeatPath:
