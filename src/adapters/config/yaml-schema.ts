@@ -7,6 +7,7 @@ import type { NotifyPolicy } from "../../core/entity/notify-policy";
 import type { RetryPolicy } from "../../core/entity/retry-policy";
 import type { RestartPolicy } from "../../core/entity/restart-policy";
 import type { Schedule } from "../../core/entity/schedule";
+import { Cron } from "croner";
 
 export interface YamlJobsFile {
   global?: GlobalConcurrencyConfig;
@@ -64,9 +65,63 @@ export function validateYamlJobsFile(
     }
   }
 
+  // Cross-job invariants — only meaningful once every job parsed individually.
+  // These catch config-hygiene faults the per-job pass cannot see and that
+  // otherwise fail silently at runtime (the dual-scheduling incident class).
+  if (errors.length === 0) {
+    errors.push(...validateCrossJob(jobs));
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   const value: YamlJobsFile = global !== undefined ? { global, jobs } : { jobs };
   return { ok: true, value };
+}
+
+// scheduleSignature — stable key for "the same schedule". Two jobs running the
+// identical command on the identical schedule are a redundant double-schedule
+// (the in-file analog of running the same job under launchd AND auto-cron).
+function scheduleSignature(s: Schedule): string {
+  switch (s.kind) {
+    case "cron":
+      return `cron:${s.expr}:${s.timezone ?? ""}`;
+    case "interval":
+      return `interval:${s.seconds}`;
+    case "manual":
+      return "manual";
+  }
+}
+
+function validateCrossJob(jobs: readonly Job[]): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const seenNames = new Set<string>();
+  const seenCmdSchedule = new Map<string, string>(); // sig -> first owner name
+
+  for (const job of jobs) {
+    // duplicate job name — name is the key for run history and in-memory
+    // lastFireAt, so a collision silently corrupts both.
+    if (seenNames.has(job.name)) {
+      errors.push({ path: "$.jobs", message: `duplicate job name: "${job.name}"` });
+    } else {
+      seenNames.add(job.name);
+    }
+
+    // duplicate command + identical schedule — redundant double-schedule
+    // (the in-file analog of running the same job under launchd AND auto-cron).
+    // ServiceJob has no schedule (long-lived), so key it as "service".
+    const schedSig =
+      job.lifecycle === "service" ? "service" : scheduleSignature(job.schedule);
+    const sig = `${JSON.stringify(job.command)}@${schedSig}`;
+    const firstOwner = seenCmdSchedule.get(sig);
+    if (firstOwner !== undefined) {
+      errors.push({
+        path: "$.jobs",
+        message: `job "${job.name}" duplicates command + schedule of "${firstOwner}"`,
+      });
+    } else {
+      seenCmdSchedule.set(sig, job.name);
+    }
+  }
+  return errors;
 }
 
 function validateJob(
@@ -306,6 +361,19 @@ function validateSchedule(raw: unknown, path: string): ValidationError[] {
   if (kind === "cron") {
     if (typeof obj["expr"] !== "string" || obj["expr"].length === 0) {
       errors.push({ path: `${path}.expr`, message: "must be non-empty string" });
+    } else {
+      // Validate the cron expression actually parses (croner), so a malformed
+      // expr fails at config load instead of throwing silently on every tick
+      // at runtime (cron-evaluator builds `new Cron(expr)` per tick).
+      const tz = typeof obj["timezone"] === "string" ? obj["timezone"] : undefined;
+      try {
+        new Cron(obj["expr"], tz !== undefined ? { timezone: tz } : {});
+      } catch (e) {
+        errors.push({
+          path: `${path}.expr`,
+          message: `invalid cron expression: ${(e as Error).message}`,
+        });
+      }
     }
     if (obj["timezone"] !== undefined && typeof obj["timezone"] !== "string") {
       errors.push({ path: `${path}.timezone`, message: "must be string" });

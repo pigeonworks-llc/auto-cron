@@ -49,37 +49,52 @@ console.log(`auto-cron daemon starting (jobs=${deps.jobConfig.jobs().length}, da
 async function loop() {
   const lastFireAt: Record<string, number> = {};
   while (!ac.signal.aborted) {
-    const now = deps.clock.now();
-    const due = deps.scheduleTick.findDueJobs({
-      jobs: deps.jobConfig.jobs().filter(j => (j.lifecycle ?? "oneshot") === "oneshot") as readonly OneshotJob[],
-      lastFireAt,
-      clock: deps.clock,
-      scheduler: deps.scheduler,
-    });
-    for (const d of due) {
-      lastFireAt[d.job.name] = now;
-      const acquire = deps.concurrencyController.acquire(d.job);
-      if (!acquire.ok) continue;
-      const { releaseToken } = acquire;
-      const fireAt = now;
-      // fire & forget runJob — 完了後に release
-      void deps.runJob(d.job, undefined, ac.signal).then(async (outcome) => {
-        deps.concurrencyController.release(releaseToken);
-        if (outcome.finalFailure) {
-          const run: JobRun = {
-            jobId: d.job.name,
-            runId: outcome.runIds[outcome.runIds.length - 1] ?? "",
-            attempt: outcome.finalAttempt,
-            startedAt: fireAt,
-            finishedAt: deps.clock.now(),
-            exitCode: outcome.finalExit.exitCode,
-            stdout: outcome.finalExit.stdout,
-            stderr: outcome.finalExit.stderr,
-            state: "failed",
-          };
-          await deps.notifier.notify({ job: d.job, run, severity: "error" });
-        }
+    // A single tick must never tear down the whole scheduler. Without this
+    // guard a throw (e.g. a malformed cron in findDueJobs, or acquire) rejected
+    // loop() while the process stayed alive — KeepAlive never fires, so ALL
+    // scheduling stops silently. Catch per-tick, log, and continue.
+    try {
+      const now = deps.clock.now();
+      const due = deps.scheduleTick.findDueJobs({
+        jobs: deps.jobConfig.jobs().filter(j => (j.lifecycle ?? "oneshot") === "oneshot") as readonly OneshotJob[],
+        lastFireAt,
+        clock: deps.clock,
+        scheduler: deps.scheduler,
       });
+      for (const d of due) {
+        lastFireAt[d.job.name] = now;
+        const acquire = deps.concurrencyController.acquire(d.job);
+        if (!acquire.ok) continue;
+        const { releaseToken } = acquire;
+        const fireAt = now;
+        // fire & forget runJob — 完了後に release。reject 時も release して
+        // concurrency slot を leak させない (旧コードは .catch なしで
+        // unhandled rejection + slot leak になりえた)。
+        void deps.runJob(d.job, undefined, ac.signal)
+          .then(async (outcome) => {
+            deps.concurrencyController.release(releaseToken);
+            if (outcome.finalFailure) {
+              const run: JobRun = {
+                jobId: d.job.name,
+                runId: outcome.runIds[outcome.runIds.length - 1] ?? "",
+                attempt: outcome.finalAttempt,
+                startedAt: fireAt,
+                finishedAt: deps.clock.now(),
+                exitCode: outcome.finalExit.exitCode,
+                stdout: outcome.finalExit.stdout,
+                stderr: outcome.finalExit.stderr,
+                state: "failed",
+              };
+              await deps.notifier.notify({ job: d.job, run, severity: "error" });
+            }
+          })
+          .catch((err: unknown) => {
+            deps.concurrencyController.release(releaseToken);
+            console.error(`auto-cron runJob "${d.job.name}" rejected:`, err);
+          });
+      }
+    } catch (e) {
+      console.error("auto-cron scheduler tick error (continuing):", e);
     }
     await new Promise<void>(r => setTimeout(r, 1000));
   }
