@@ -503,3 +503,75 @@ describe("validateYamlJobsFile — notify.severity_routing", () => {
     ).toBe(true);
   });
 });
+
+describe("validateYamlJobsFile — load-time guards (cross-job + cron)", () => {
+  function oneshot(
+    name: string,
+    command: readonly string[],
+    schedule:
+      | { kind: "cron"; expr: string; timezone?: string }
+      | { kind: "interval"; seconds: number },
+  ) {
+    return {
+      name,
+      command,
+      notify: { onFailure: "silent" },
+      schedule,
+      retry: { maxAttempts: 1, backoffMs: [] },
+    };
+  }
+
+  it("rejects duplicate job name", () => {
+    const result = validateYamlJobsFile({
+      jobs: [
+        oneshot("dup", ["a"], { kind: "interval", seconds: 5 }),
+        oneshot("dup", ["b"], { kind: "interval", seconds: 9 }),
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.message.includes("duplicate job name"))).toBe(true);
+  });
+
+  it("rejects duplicate command + identical schedule (redundant double-schedule)", () => {
+    const result = validateYamlJobsFile({
+      jobs: [
+        oneshot("a", ["intel", "brief", "daily"], { kind: "cron", expr: "0 10 * * *" }),
+        oneshot("b", ["intel", "brief", "daily"], { kind: "cron", expr: "0 10 * * *" }),
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.some((e) => e.message.includes("duplicates command + schedule")),
+    ).toBe(true);
+  });
+
+  it("accepts same command on DIFFERENT schedules (e.g. daily + weekly)", () => {
+    const result = validateYamlJobsFile({
+      jobs: [
+        oneshot("daily", ["intel", "brief"], { kind: "cron", expr: "0 10 * * *" }),
+        oneshot("weekly", ["intel", "brief"], { kind: "cron", expr: "0 10 * * 1" }),
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects an invalid cron expression at load", () => {
+    const result = validateYamlJobsFile({
+      jobs: [oneshot("bad", ["x"], { kind: "cron", expr: "not a cron" })],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.path.endsWith(".expr"))).toBe(true);
+  });
+
+  it("accepts a valid cron expression", () => {
+    const result = validateYamlJobsFile({
+      jobs: [
+        oneshot("good", ["x"], { kind: "cron", expr: "0 10 * * *", timezone: "Asia/Tokyo" }),
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+});

@@ -92,9 +92,26 @@ describe("schedule-tick usecase", () => {
     expect(findDueJobs(input)).toHaveLength(0);
   });
 
-  it("uses lastFireAt=0 when job has never fired (first run)", () => {
-    // last=0, interval=5s → next = 0+5000 = 5000 <= now=10000
+  it("does NOT fire on boot when job has never fired (fire-on-boot suppressed)", () => {
+    // unseen job, default: base=now=10000 → next=15000 > 10000 → NOT due.
+    // Prevents the daemon-restart re-fire that caused duplicate sends.
     const job = makeOneshotJob({ name: "fresh", schedule: { kind: "interval", seconds: 5 } });
+    const input: ScheduleTickInput = {
+      jobs: [job],
+      lastFireAt: {},
+      clock: makeClock(10_000),
+      scheduler,
+    };
+    expect(findDueJobs(input)).toHaveLength(0);
+  });
+
+  it("DOES fire on boot when catchUpOnWake is true (opt-in catch-up)", () => {
+    // unseen job + catchUpOnWake: base=0 → next=5000 <= 10000 → due.
+    const job = makeOneshotJob({
+      name: "catchup",
+      schedule: { kind: "interval", seconds: 5 },
+      catchUpOnWake: true,
+    });
     const input: ScheduleTickInput = {
       jobs: [job],
       lastFireAt: {},
@@ -114,7 +131,7 @@ describe("schedule-tick usecase", () => {
     // Both last fired at 0, now=10000 → both due (next=5000 <= 10000)
     const input: ScheduleTickInput = {
       jobs,
-      lastFireAt: {},
+      lastFireAt: { alpha: 0, beta: 0 },
       clock: makeClock(10_000),
       scheduler,
     };

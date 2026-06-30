@@ -61,7 +61,7 @@ global:
 
 jobs:
   - name: security-scans
-    schedule: { cron: "0 18 * * *", timezone: "Asia/Tokyo" }
+    schedule: { kind: cron, expr: "0 18 * * *", timezone: "Asia/Tokyo" }
     command: [bash, -lc, "cd ~/src/.../aigis-monolith && ./jenkins/scripts/security-scans.sh"]
     env: { AIGIS_HOME: /Users/shunichi/src/.../aigis-monolith }
     retry: { maxAttempts: 3, backoffMs: [60000, 300000, 900000] }
@@ -69,12 +69,42 @@ jobs:
     notify: { onFailure: immediate }
 
   - name: auto-implement
-    schedule: { cron: "*/15 * * * *" }
+    schedule: { kind: cron, expr: "*/15 * * * *" }
     command: [bash, -lc, "cd ~/src/.../aigis-monolith && ./jenkins/scripts/auto-implement.sh"]
     concurrency: { onOverlap: skip }
     retry: { maxAttempts: 1 }
     notify: { onFailure: digest }
 ```
+
+`schedule.kind` は `cron` (要 `expr`、任意 `timezone`) / `interval` (要 `seconds`) /
+`manual` のいずれか。不正な cron `expr`・重複 job 名・同一 command+schedule の重複登録は
+**ロード時に reject** される (`src/adapters/config/yaml-schema.ts`)。
+
+### 起動時の発火 (fire-on-boot) と catch-up
+
+定期ジョブは **daemon の起動/再起動時に即発火しない** (次の予定時刻まで待つ)。launchd
+KeepAlive で daemon が頻繁に再起動しても多重発火しないための既定動作。起動時に取りこぼし分を
+1 回 catch-up させたいジョブだけ `catchUpOnWake: true` を付ける (opt-in)。
+
+## auto-cron と launchd の棲み分け
+
+定期実行の SoT を 1 つに保つための境界 (二重実行による重複送信の再発防止)。
+
+| | 役割 | 置き場所 |
+|---|---|---|
+| **auto-cron** (本基盤) | 開始して終わる**定期/cron ジョブ**の SoT。全定期ジョブはここに集約 | `~/.config/auto-cron/jobs.yaml` (chezmoi 管理) に追記 → daemon に SIGHUP |
+| **launchd** | 真の**常駐 daemon** / KeepAlive / socket / login item、および **auto-cron 自身の起動** | `*.plist` (auto-cron は `deploy/launchd/com.pigeonworks.auto-cron.plist`) |
+
+原則:
+
+- **定期バッチを launchd の個別 plist に置かない** — auto-cron jobs.yaml に書く。
+- **同一ジョブを両方に置かない**。1 ジョブ = 1 SoT。移行時は旧側を必ず撤去する。
+- intel `com.local.intel.*` は 2026-06-14 に launchd → auto-cron へ移行済 (2026-06-30 に旧
+  launchd plist を撤去)。`intel generate-launchd --apply` は退役済で**通常運用では実行しない**
+  — 実行すると退役した launchd fleet を再生成し、auto-cron と二重実行になって重複送信が再発する。
+
+> 2026-06 incident: intel を auto-cron へ移行後も旧 launchd plist が `generate-launchd --apply`
+> で復活し、両系統が 2 週間 二重メールを送り続けた。SoT の一元化と「移行 = 旧側撤去」を徹底する。
 
 ## 並列処理制御
 
