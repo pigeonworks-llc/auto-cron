@@ -15,7 +15,12 @@ import { SseChannel } from "../adapters/http/sse-channel";
 import { runJob } from "../core/usecase/run-job";
 import { findDueJobs } from "../core/usecase/schedule-tick";
 
-export function buildDeps(cfg: { jobsYaml: string; dbPath: string; dashboardPort: number }) {
+export function buildDeps(cfg: {
+  jobsYaml: string;
+  dbPath: string;
+  dashboardPort: number;
+  dashboardHost?: string;
+}) {
   const jobConfig = new YamlJobConfig(cfg.jobsYaml);
   mkdirSync(dirname(cfg.dbPath), { recursive: true });
   const db = new Database(cfg.dbPath, { create: true });
@@ -32,7 +37,13 @@ export function buildDeps(cfg: { jobsYaml: string; dbPath: string; dashboardPort
     gchatWebhook: new GChatWebhookNotifier(process.env.GCHAT_WEBHOOK_AUTOCRON ?? ""),
   });
   const events = new SseChannel();
-  const dashboardServer = startDashboard({ jobConfig, runStore, port: cfg.dashboardPort, events });
+  const dashboardServer = startDashboard({
+    jobConfig,
+    runStore,
+    port: cfg.dashboardPort,
+    hostname: cfg.dashboardHost,
+    events,
+  });
   return {
     jobConfig, runStore, executor, clock, scheduler, concurrencyController, notifier, events,
     dashboardServer,
