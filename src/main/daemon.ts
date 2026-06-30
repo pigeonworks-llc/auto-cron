@@ -1,11 +1,21 @@
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type { OneshotJob } from "../core/entity/job";
 import type { JobRun } from "../core/entity/job-run";
 import { buildDeps } from "./di";
+import { buildHeartbeat } from "../core/usecase/heartbeat";
+import { detectSilentJobs } from "../core/usecase/detect-silence";
 
 const cfg = {
   jobsYaml: process.env.AUTO_CRON_JOBS_YAML ?? `${process.env.HOME}/.config/auto-cron/jobs.yaml`,
   dbPath: process.env.AUTO_CRON_DB_PATH ?? `${process.env.HOME}/.local/share/auto-cron/runs.db`,
   dashboardPort: Number(process.env.AUTO_CRON_DASHBOARD_PORT ?? 7891),
+  // silent-failure L2: daemon liveness footprint (外部 watchdog が mtime を見る) +
+  // job 沈黙検知 (予定 + grace を過ぎても走らない job を warn 通知)。
+  heartbeatPath:
+    process.env.AUTO_CRON_HEARTBEAT ?? `${process.env.HOME}/.local/state/auto-cron/heartbeat.json`,
+  silenceGraceMs: Number(process.env.AUTO_CRON_SILENCE_GRACE_MIN ?? 60) * 60_000,
+  silenceSweepMs: Number(process.env.AUTO_CRON_SILENCE_SWEEP_MIN ?? 5) * 60_000,
 };
 
 const ac = new AbortController();
@@ -46,8 +56,55 @@ console.log(`auto-cron daemon starting (jobs=${deps.jobConfig.jobs().length}, da
 // ServiceJob は startup で 1 度起動 + supervise loop、
 // OneshotJob は schedule-tick で due 時に runJob spawn。
 
+// silent-failure L2: daemon 生存下で個別 job が黙ったのを検知して warn 通知。
+// 沈黙→復帰の遷移時のみ通知 (alertedSilent で重複抑止、再起動で reset は許容)。
+const alertedSilent = new Set<string>();
+async function runSilenceSweep(now: number, daemonStartedAt: number): Promise<void> {
+  const oneshot = deps.jobConfig
+    .jobs()
+    .filter((j) => (j.lifecycle ?? "oneshot") === "oneshot") as readonly OneshotJob[];
+  const lastStartedAt: Record<string, number | undefined> = {};
+  for (const j of oneshot) {
+    const recent = await deps.runStore.recent(j.name, 1);
+    lastStartedAt[j.name] = recent[0]?.startedAt;
+  }
+  const silent = detectSilentJobs({
+    jobs: oneshot,
+    lastStartedAt,
+    now,
+    graceMs: cfg.silenceGraceMs,
+    fallbackBase: daemonStartedAt,
+    scheduler: deps.scheduler,
+  });
+  const silentNames = new Set(silent.map((s) => s.job.name));
+  for (const name of [...alertedSilent]) {
+    if (!silentNames.has(name)) alertedSilent.delete(name); // recovered
+  }
+  for (const s of silent) {
+    if (alertedSilent.has(s.job.name)) continue; // already alerted this episode
+    alertedSilent.add(s.job.name);
+    const mins = Math.round(s.overdueByMs / 60_000);
+    const run: JobRun = {
+      jobId: s.job.name,
+      runId: `silence-${now}`,
+      attempt: 0,
+      startedAt: s.expectedAt,
+      finishedAt: now,
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      state: "failed",
+      error: `job silent: overdue ${mins}m (expected fire at ${new Date(s.expectedAt).toISOString()})`,
+    };
+    await deps.notifier.notify({ job: s.job, run, severity: "warn" });
+  }
+}
+
 async function loop() {
   const lastFireAt: Record<string, number> = {};
+  const daemonStartedAt = deps.clock.now();
+  let lastSweepAt = daemonStartedAt;
+  mkdirSync(dirname(cfg.heartbeatPath), { recursive: true });
   while (!ac.signal.aborted) {
     // A single tick must never tear down the whole scheduler. Without this
     // guard a throw (e.g. a malformed cron in findDueJobs, or acquire) rejected
@@ -55,6 +112,21 @@ async function loop() {
     // scheduling stops silently. Catch per-tick, log, and continue.
     try {
       const now = deps.clock.now();
+      // heartbeat footprint — 外部 watchdog (auto-cron-health) が mtime stale を見て
+      // daemon 死活/ハングを検知する。tick が回っている = loop が生きている証拠。
+      try {
+        writeFileSync(
+          cfg.heartbeatPath,
+          JSON.stringify(buildHeartbeat(now, process.pid, deps.jobConfig.jobs().length)),
+        );
+      } catch (e) {
+        console.error("auto-cron heartbeat write failed:", e);
+      }
+      // job 沈黙検知 sweep (低頻度)。
+      if (now - lastSweepAt >= cfg.silenceSweepMs) {
+        lastSweepAt = now;
+        await runSilenceSweep(now, daemonStartedAt);
+      }
       const due = deps.scheduleTick.findDueJobs({
         jobs: deps.jobConfig.jobs().filter(j => (j.lifecycle ?? "oneshot") === "oneshot") as readonly OneshotJob[],
         lastFireAt,
