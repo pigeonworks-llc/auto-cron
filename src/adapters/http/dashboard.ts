@@ -3,6 +3,7 @@ import type { JobConfig } from "../../core/port/job-config";
 import type { RunStore } from "../../core/port/run-store";
 import { SseChannel, formatSseFrame } from "./sse-channel";
 import { renderJobDag } from "./render-mermaid";
+import { renderMetrics } from "./metrics";
 
 export interface DashboardDeps {
   jobConfig: JobConfig;
@@ -30,6 +31,27 @@ export function startDashboard(deps: DashboardDeps): Server<undefined> {
 <h2>DAG</h2><pre>${dag}</pre>
 <h2>Events</h2><p><a href="/events">SSE stream</a></p></body></html>`;
         return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (url.pathname === "/healthz" || url.pathname === "/health") {
+        return Response.json({ status: "ok", jobs: deps.jobConfig.jobs().length });
+      }
+      if (url.pathname === "/metrics") {
+        const jobs = deps.jobConfig.jobs();
+        const perJob = await Promise.all(
+          jobs.map(async (j) => {
+            const recent = await deps.runStore.recent(j.name, 1);
+            const last = recent[0];
+            return {
+              name: j.name,
+              lastRunMs: last?.startedAt ?? null,
+              lastSuccess: last === undefined ? null : last.state === "succeeded",
+            };
+          }),
+        );
+        const body = renderMetrics({ jobsTotal: jobs.length, perJob });
+        return new Response(body, {
+          headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" },
+        });
       }
       if (url.pathname === "/jobs") {
         return Response.json(deps.jobConfig.jobs());

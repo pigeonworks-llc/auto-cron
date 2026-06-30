@@ -163,6 +163,29 @@ describe("dashboard GET /events", () => {
   });
 });
 
+describe("dashboard GET /healthz", () => {
+  it("returns 200 {status:ok, jobs}", async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/healthz`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; jobs: number };
+    expect(body.status).toBe("ok");
+    expect(body.jobs).toBe(2);
+  });
+});
+
+describe("dashboard GET /metrics", () => {
+  it("returns Prometheus text with jobs_total and per-job gauges", async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/metrics`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    const body = await res.text();
+    expect(body).toContain("auto_cron_jobs_total 2");
+    // fetch-data has a succeeded run in the mock; process-data has none.
+    expect(body).toContain('auto_cron_last_run_success{job="fetch-data"} 1');
+    expect(body).not.toContain('job="process-data"');
+  });
+});
+
 describe("dashboard GET /unknown", () => {
   it("returns 404 for unrecognised paths", async () => {
     const res = await fetch(`http://localhost:${TEST_PORT}/does-not-exist`);
