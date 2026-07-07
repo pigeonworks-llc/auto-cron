@@ -49,6 +49,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: {},
       clock: makeClock(1_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     expect(findDueJobs(input)).toEqual([]);
   });
@@ -61,6 +62,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: { a: 9_000 },
       clock: makeClock(10_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     const result = findDueJobs(input);
     expect(result).toHaveLength(0);
@@ -74,6 +76,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: { a: 9_000 },
       clock: makeClock(20_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     const result = findDueJobs(input);
     expect(result).toHaveLength(1);
@@ -88,12 +91,14 @@ describe("schedule-tick usecase", () => {
       lastFireAt: {},
       clock: makeClock(99_999_999),
       scheduler,
+      fallbackBase: 10_000,
     };
     expect(findDueJobs(input)).toHaveLength(0);
   });
 
   it("does NOT fire on boot when job has never fired (fire-on-boot suppressed)", () => {
-    // unseen job, default: base=now=10000 → next=15000 > 10000 → NOT due.
+    // unseen job, default: base=fallbackBase=10000 (daemon 起動時刻) →
+    // next=15000 > now=10000 → NOT due.
     // Prevents the daemon-restart re-fire that caused duplicate sends.
     const job = makeOneshotJob({ name: "fresh", schedule: { kind: "interval", seconds: 5 } });
     const input: ScheduleTickInput = {
@@ -101,6 +106,38 @@ describe("schedule-tick usecase", () => {
       lastFireAt: {},
       clock: makeClock(10_000),
       scheduler,
+      fallbackBase: 10_000,
+    };
+    expect(findDueJobs(input)).toHaveLength(0);
+  });
+
+  it("unseen job BECOMES due once its first post-boot occurrence passes (regression: 2026-06-30 incident)", () => {
+    // 旧実装は fallback に毎 tick の now を使っており、未発火 job の next が
+    // tick ごとに未来へスライドして永遠に due にならなかった (全 fleet 停止)。
+    // fallbackBase=10000 固定なら next=15000 <= now=20000 → due。
+    const job = makeOneshotJob({ name: "fresh", schedule: { kind: "interval", seconds: 5 } });
+    const input: ScheduleTickInput = {
+      jobs: [job],
+      lastFireAt: {},
+      clock: makeClock(20_000),
+      scheduler,
+      fallbackBase: 10_000,
+    };
+    const result = findDueJobs(input);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.job.name).toBe("fresh");
+    expect(result[0]!.nextFireAt).toBe(15_000); // 10000 + 5000
+  });
+
+  it("unseen job stays not-due while now is before its first post-boot occurrence", () => {
+    // fallbackBase=10000, next=15000 > now=14999 → not due (境界の直前)。
+    const job = makeOneshotJob({ name: "fresh", schedule: { kind: "interval", seconds: 5 } });
+    const input: ScheduleTickInput = {
+      jobs: [job],
+      lastFireAt: {},
+      clock: makeClock(14_999),
+      scheduler,
+      fallbackBase: 10_000,
     };
     expect(findDueJobs(input)).toHaveLength(0);
   });
@@ -117,6 +154,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: {},
       clock: makeClock(10_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     const result = findDueJobs(input);
     expect(result).toHaveLength(1);
@@ -134,6 +172,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: { alpha: 0, beta: 0 },
       clock: makeClock(10_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     const result = findDueJobs(input);
     expect(result).toHaveLength(2);
@@ -152,6 +191,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: { overdue: 0, pending: 9_000 },
       clock: makeClock(10_000),
       scheduler,
+      fallbackBase: 10_000,
     };
     const result = findDueJobs(input);
     expect(result).toHaveLength(1);
@@ -172,6 +212,7 @@ describe("schedule-tick usecase", () => {
       lastFireAt: {},
       clock: makeClock(0),
       scheduler,
+      fallbackBase: 10_000,
     };
     void input;
   });
