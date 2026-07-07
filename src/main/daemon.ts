@@ -136,6 +136,9 @@ async function loop() {
         lastFireAt,
         clock: deps.clock,
         scheduler: deps.scheduler,
+        // 固定基準点。毎 tick の now を渡すと未発火 job が永遠に due にならない
+        // (2026-06-30 incident、schedule-tick.ts の docblock 参照)。
+        fallbackBase: daemonStartedAt,
       });
       for (const d of due) {
         lastFireAt[d.job.name] = now;
