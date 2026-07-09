@@ -17,6 +17,14 @@
 //   該当 severity の dispatch が未指定なら flat enum (onFailure) に fallback。
 //   例: { warn: "digest", crit: "immediate" } = warn は朝の digest 集約に、
 //       crit は GChat 即時通知。
+//
+// webhookEnv (opt-in):
+//   immediate 経路の宛先 webhook を per-job で上書きする **env var 名**。
+//   URL 直書きではなく env 間接参照 — jobs.yaml は chezmoi 管理 (git) のため
+//   secret を平文で置けない。launcher が secret.env から export した env 名を
+//   書く (例: GCHAT_WEBHOOK_EATREEL)。env 未設定/空なら従来の
+//   GCHAT_WEBHOOK_AUTOCRON (mac-alerts) に fallback。digest 経路は対象外
+//   (warn-digest-file は宛先を持たない)。
 export interface NotifyPolicy {
   onFailure: "immediate" | "digest" | "silent";
   onSuccess?: "immediate" | "silent";
@@ -24,4 +32,5 @@ export interface NotifyPolicy {
     warn?: "immediate" | "digest" | "silent";
     crit?: "immediate" | "digest" | "silent";
   };
+  webhookEnv?: string;
 }
