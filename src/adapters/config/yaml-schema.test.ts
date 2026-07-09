@@ -504,6 +504,72 @@ describe("validateYamlJobsFile — notify.severity_routing", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// notify.webhookEnv (per-job immediate 宛先 override、env 間接参照)
+// ---------------------------------------------------------------------------
+
+describe("validateYamlJobsFile — notify.webhookEnv", () => {
+  it("accepts webhookEnv as env var name and carries it onto the Job", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        webhookEnv: "GCHAT_WEBHOOK_EATREEL",
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const job = result.value.jobs[0];
+    if (!job) return;
+    expect(job.notify.webhookEnv).toBe("GCHAT_WEBHOOK_EATREEL");
+  });
+
+  it("accepts notify without webhookEnv (optional)", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: { onFailure: "digest" },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const job = result.value.jobs[0];
+    if (!job) return;
+    expect(job.notify.webhookEnv).toBeUndefined();
+  });
+
+  it("rejects webhookEnv that is a URL (must be an env var NAME)", () => {
+    const raw = {
+      ...validOneshotRaw(),
+      notify: {
+        onFailure: "digest",
+        webhookEnv: "https://chat.googleapis.com/v1/spaces/X/messages",
+      },
+    };
+    const result = validateYamlJobsFile({ jobs: [raw] });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.some((e) => e.path.endsWith("notify.webhookEnv")),
+    ).toBe(true);
+  });
+
+  it("rejects webhookEnv that is empty / non-string", () => {
+    for (const bad of ["", 42, null]) {
+      const raw = {
+        ...validOneshotRaw(),
+        notify: { onFailure: "digest", webhookEnv: bad },
+      };
+      const result = validateYamlJobsFile({ jobs: [raw] });
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(
+        result.errors.some((e) => e.path.endsWith("notify.webhookEnv")),
+      ).toBe(true);
+    }
+  });
+});
+
 describe("validateYamlJobsFile — load-time guards (cross-job + cron)", () => {
   function oneshot(
     name: string,

@@ -8,15 +8,17 @@ export class GChatWebhookNotifier implements Notifier {
   constructor(
     private readonly webhookUrl: string,
     private readonly fetchFn: typeof fetch = fetch,
+    private readonly envSource: Record<string, string | undefined> = process.env,
   ) {}
 
   async notify(input: { job: Job; run: JobRun; severity: Severity }): Promise<void> {
-    if (this.webhookUrl.length === 0) return; // webhook 未設定 → silent
+    const url = this.resolveUrl(input.job);
+    if (url.length === 0) return; // webhook 未設定 → silent
     const text = formatMessage(input);
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     try {
-      await this.fetchFn(this.webhookUrl, {
+      await this.fetchFn(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -27,6 +29,17 @@ export class GChatWebhookNotifier implements Notifier {
     } finally {
       clearTimeout(t);
     }
+  }
+
+  // notify.webhookEnv (env var 名) が指す env が非空ならそれを宛先にする。
+  // 未指定/env 空は constructor の default webhook (GCHAT_WEBHOOK_AUTOCRON)。
+  private resolveUrl(job: Job): string {
+    const envName = job.notify.webhookEnv;
+    if (envName !== undefined && envName.length > 0) {
+      const overridden = this.envSource[envName] ?? "";
+      if (overridden.length > 0) return overridden;
+    }
+    return this.webhookUrl;
   }
 }
 

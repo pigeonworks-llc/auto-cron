@@ -315,6 +315,17 @@ function validateNotify(raw: unknown, path: string): ValidationError[] {
       }
     }
   }
+  // webhookEnv (optional) — immediate 経路の宛先を上書きする env var 名。
+  // URL そのものではなく名前 (jobs.yaml は git 管理で secret を置けない)。
+  if (obj["webhookEnv"] !== undefined) {
+    const we = obj["webhookEnv"];
+    if (typeof we !== "string" || we.length === 0 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(we)) {
+      errors.push({
+        path: `${path}.webhookEnv`,
+        message: "must be a non-empty env var name (e.g. GCHAT_WEBHOOK_EATREEL), not a URL",
+      });
+    }
+  }
   return errors;
 }
 
