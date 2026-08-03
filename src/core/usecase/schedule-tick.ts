@@ -5,6 +5,8 @@ import type { Scheduler } from "../port/scheduler";
 // schedule-tick — OneshotJob 群について「now で fire すべきか」 を判定。
 // ServiceJob は対象外 (常駐なので tick fire の概念無し)。
 // lastFireAt は in-memory state (daemon が tick 間で保持)。
+// 更新は claim-due (start / overlap-skip) 側のみ — acquire 失敗 (cap) では
+// 進めない (2026-08-03 silent-job incident)。
 // Scheduler port は croner-backed CronEvaluator を main 層で inject する。
 export interface ScheduleTickInput {
   jobs: readonly OneshotJob[];

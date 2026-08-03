@@ -5,6 +5,7 @@ import type { JobRun } from "../core/entity/job-run";
 import { buildDeps } from "./di";
 import { buildHeartbeat } from "../core/usecase/heartbeat";
 import { detectSilentJobs } from "../core/usecase/detect-silence";
+import { claimDueJobs } from "../core/usecase/claim-due";
 
 const cfg = {
   jobsYaml: process.env.AUTO_CRON_JOBS_YAML ?? `${process.env.HOME}/.config/auto-cron/jobs.yaml`,
@@ -108,6 +109,8 @@ async function loop() {
   const lastFireAt: Record<string, number> = {};
   const daemonStartedAt = deps.clock.now();
   let lastSweepAt = daemonStartedAt;
+  // cap-defer の edge ログ (毎 tick の spam を避ける: 遷移時のみ)。
+  const deferredJobs = new Set<string>();
   mkdirSync(dirname(cfg.heartbeatPath), { recursive: true });
   while (!ac.signal.aborted) {
     // A single tick must never tear down the whole scheduler. Without this
@@ -140,21 +143,42 @@ async function loop() {
         // (2026-06-30 incident、schedule-tick.ts の docblock 参照)。
         fallbackBase: daemonStartedAt,
       });
-      for (const d of due) {
-        lastFireAt[d.job.name] = now;
-        const acquire = deps.concurrencyController.acquire(d.job);
-        if (!acquire.ok) continue;
-        const { releaseToken } = acquire;
+      // due 消費は claim 成功 (start) / 意図的 skip (overlap) のときだけ。
+      // global-cap / group-cap は defer → lastFireAt 非更新 → 次 tick で再 due
+      // (2026-08-03 silent-job incident root fix)。
+      const claims = claimDueJobs({
+        due,
+        lastFireAt,
+        now,
+        controller: deps.concurrencyController,
+      });
+      const stillDeferred = new Set<string>();
+      for (const c of claims) {
+        if (c.kind === "defer") {
+          stillDeferred.add(c.job.name);
+          if (!deferredJobs.has(c.job.name)) {
+            console.warn(
+              `auto-cron defer job=${c.job.name} reason=${c.reason} (will retry next tick)`,
+            );
+          }
+          continue;
+        }
+        if (c.kind === "skip") {
+          console.log(`auto-cron skip job=${c.job.name} reason=${c.reason}`);
+          continue;
+        }
+        // start
+        const { job, releaseToken } = c;
         const fireAt = now;
         // fire & forget runJob — 完了後に release。reject 時も release して
         // concurrency slot を leak させない (旧コードは .catch なしで
         // unhandled rejection + slot leak になりえた)。
-        void deps.runJob(d.job, undefined, ac.signal)
+        void deps.runJob(job, undefined, ac.signal)
           .then(async (outcome) => {
             deps.concurrencyController.release(releaseToken);
             if (outcome.finalFailure) {
               const run: JobRun = {
-                jobId: d.job.name,
+                jobId: job.name,
                 runId: outcome.runIds[outcome.runIds.length - 1] ?? "",
                 attempt: outcome.finalAttempt,
                 startedAt: fireAt,
@@ -164,14 +188,21 @@ async function loop() {
                 stderr: outcome.finalExit.stderr,
                 state: "failed",
               };
-              await deps.notifier.notify({ job: d.job, run, severity: "error" });
+              await deps.notifier.notify({ job, run, severity: "error" });
             }
           })
           .catch((err: unknown) => {
             deps.concurrencyController.release(releaseToken);
-            console.error(`auto-cron runJob "${d.job.name}" rejected:`, err);
+            console.error(`auto-cron runJob "${job.name}" rejected:`, err);
           });
       }
+      for (const name of deferredJobs) {
+        if (!stillDeferred.has(name)) {
+          console.log(`auto-cron defer cleared job=${name}`);
+        }
+      }
+      deferredJobs.clear();
+      for (const name of stillDeferred) deferredJobs.add(name);
     } catch (e) {
       console.error("auto-cron scheduler tick error (continuing):", e);
     }

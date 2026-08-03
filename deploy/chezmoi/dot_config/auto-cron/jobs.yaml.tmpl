@@ -569,14 +569,15 @@ jobs:
       onFailure: immediate
 
   # migrated from com.local.intel.briefing-claude-code-audit-weekly
+  # 2026-08-03: service-runner 契約に修正 + :05 offset (herd 回避)
   - name: intel-briefing-claude-code-audit-weekly
     schedule:
       kind: cron
-      expr: "0 9 * * 1"
+      expr: "5 9 * * 1"
       timezone: Asia/Tokyo
     command:
-      - {{ .chezmoi.homeDir }}/.local/share/mise/shims/node
-      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/intel/dist/index.js
+      - /bin/bash
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/strategy/tools/service-runner/run.sh
       - claude-code-audit-weekly
     env:
       PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -587,10 +588,11 @@ jobs:
       onFailure: immediate
 
   # migrated from com.local.intel.briefing-vendor-watch-weekly (service-runner 経由、 bash)
+  # 2026-08-03: :12 offset (herd 回避)
   - name: intel-briefing-vendor-watch-weekly
     schedule:
       kind: cron
-      expr: "0 9 * * 1"
+      expr: "12 9 * * 1"
       timezone: Asia/Tokyo
     command:
       - /bin/bash
