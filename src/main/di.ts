@@ -1,8 +1,7 @@
-import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { YamlJobConfig } from "../adapters/config/yaml-job-config";
 import { SqliteRunStore } from "../adapters/store/sqlite-run-store";
+import { openDb } from "../adapters/store/open-db";
 import { runMigrations, loadMigrationsFromDir } from "../adapters/store/migration-runner";
 import { BunSpawnExecutor } from "../adapters/executor/bun-spawn-executor";
 import { InMemoryConcurrencyController } from "../adapters/concurrency/in-memory-concurrency-controller";
@@ -22,8 +21,8 @@ export function buildDeps(cfg: {
   dashboardHost?: string;
 }) {
   const jobConfig = new YamlJobConfig(cfg.jobsYaml);
-  mkdirSync(dirname(cfg.dbPath), { recursive: true });
-  const db = new Database(cfg.dbPath, { create: true });
+  // openDb ensures the parent dir and sets WAL journal mode (single open path).
+  const db = openDb(cfg.dbPath);
   // migrations apply (Phase C migration-runner 経由)
   const migrations = loadMigrationsFromDir(join(import.meta.dir, "../adapters/store/migrations"));
   runMigrations(db, migrations);
