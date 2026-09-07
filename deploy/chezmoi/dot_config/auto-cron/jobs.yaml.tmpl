@@ -605,3 +605,38 @@ jobs:
       backoffMs: []
     notify:
       onFailure: immediate
+
+  # 関係者とのやり取りを md で保全する (restricted-data/comm)。
+  #
+  # 6 時間ごと。:23 offset (herd 回避)。
+  #
+  # なぜ launchd でなく auto-cron か: この estate の起動基盤は auto-cron に
+  # 寄っており (45 job 稼働)、別系統を足すと「どこで動いているか」を
+  # 探す先が増える。実行履歴も一元化される。
+  #
+  # 同種の仕組みは 2 つとも止まっている (2026-09-07 実測)。ただし原因は
+  # 起動経路ではなかった:
+  #   - comm_digests: 取り込み (raw_messages) は今日も稼働中。要約側の
+  #     openclaw comm-digest-upsert hook が sourceTs の bind に失敗し、
+  #     例外を握って進むため上流からは正常に見えていた (5月末〜)
+  #   - CRM の ## Log: 人の手書き運用で 2026-04-17 停止
+  # つまり「登録すれば止まらない」わけではない。止まったことを検出する側が
+  # 要る -> comm/tools/check-comm.mjs が最終取得日の古さで RC=1 を返す。
+  #
+  # スクリプト側の guard: branch が main でない / comm/raw 以外に変更がある
+  # ときは commit しない (人の作業を壊さない)。push もしない (vault は PR flow)。
+  - name: comm-sync
+    schedule:
+      kind: cron
+      expr: "23 */6 * * *"
+      timezone: Asia/Tokyo
+    command:
+      - /bin/bash
+      - {{ .chezmoi.homeDir }}/src/github.com/pigeonworks-llc/restricted-data/comm/launchd/comm-sync.sh
+    env:
+      PATH: {{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+    retry:
+      maxAttempts: 1
+      backoffMs: []
+    notify:
+      onFailure: immediate
